@@ -11,12 +11,27 @@ import (
 	"github.com/tknie/log"
 )
 
-var REQUEST_JSON = `{"id": {{.Id}},"method": "{{.Methods}}","params": {{.Params}}}`
-var REQUEST_MANUAL_SCHEDULE_JSON = `{"id": {{.Id}},"config": {"mode": "Manual","manual_cfg": {"time_num": {{.TimeNum}},"start_time": "{{.StartTime}}","end_time": "{{.EndTime}}","week_set": {{.WeekSet}},"power": {{.Power}},"enable": {{.Enable}}}}}`
-var REQUEST_PASSIVE_JSON = `{"id": {{.Id}}, "config": {"mode": "Passive","passive_cfg": { "power": {{.Request}}, "cd_time": {{.SetTime}}}}}`
+var requestBaseJson = `{"id": {{.Id}},"method": "{{.Methods}}","params": {{.Params}}}`
+var requestManualScheduleJson = `{"id": {{.Id}},"config": {"mode": "Manual","manual_cfg": {"time_num": {{.TimeNum}},"start_time": "{{.StartTime}}","end_time": "{{.EndTime}}","week_set": {{.WeekSet}},"power": {{.Power}},"enable": {{.Enable}}}}}`
+var requestPassiveJson = `{"id": {{.Id}}, "config": {"mode": "Passive","passive_cfg": { "power": {{.Request}}, "cd_time": {{.SetTime}}}}}`
 
 // MaxManualSchedules defines the maximum number of manual schedules that can be set for the device. This is based on the device's capabilities and ensures that we do not exceed the allowed number of schedules when clearing them.
 const MaxManualSchedules = 10
+
+// MaxRetries defines the maximum number of retry attempts when a read timeout occurs while waiting for a response from
+// the device. This allows for multiple attempts to get a response in case of temporary issues with the device or network.
+var MaxRetries = 4
+
+// ReadTimeout defines the duration in seconds to wait for a response from the device before considering it a timeout. This
+// is used to set the read deadline when waiting for a response, allowing for a reasonable amount of time for the device to
+// respond before retrying or giving up.
+var ReadTimeout = 15
+
+// RetryDelay defines the delay in seconds between retry attempts when a read timeout
+// occurs while waiting for a response from the device. This allows for a brief pause
+// before retrying the request, which can help in cases where the device may be temporarily
+// unresponsive or experiencing network issues.
+var RetryDelay = 1
 
 type Marstek struct {
 	Services   string
@@ -25,15 +40,22 @@ type Marstek struct {
 
 var requestId uint64 = 1
 
-const MaxRetries = 10
-const DefaultTimeout = 15
-
+// New creates a new instance of the Marstek struct with the provided
+// service address. It initializes the Services field with the given
+// address and returns a pointer to the Marstek instance. This function
+// is used to create a new Marstek object that can be used to interact with
+// the device.
 func New(service string) *Marstek {
 	return &Marstek{
 		Services: service,
 	}
 }
 
+// connect creates a UDP connection to the Marstek device using
+// the provided service address. It resolves the UDP address and
+// establishes a connection, which is stored in the Marstek struct
+// for future communication. The method returns any error encountered
+// during the connection process.
 func (m *Marstek) connect() error {
 	addr, err := net.ResolveUDPAddr("udp", m.Services)
 	if err != nil {
@@ -49,6 +71,11 @@ func (m *Marstek) connect() error {
 	return nil
 }
 
+// sendMessage sends a byte array message to the Marstek device and waits
+// for a response. It establishes a connection, sends the message, and reads
+// the response from the device. The method handles timeouts and retries if
+// necessary, and returns the response as a byte array along with any error
+// encountered during the process.
 func (m *Marstek) sendMessage(sendData []byte) ([]byte, error) {
 	err := m.connect()
 	if err != nil {
@@ -61,7 +88,7 @@ func (m *Marstek) sendMessage(sendData []byte) ([]byte, error) {
 	m.Connection.Write(sendData)
 	fmt.Println("Request sent, waiting for response...")
 	b := make([]byte, 4096)
-	m.Connection.SetReadDeadline(time.Now().Add(DefaultTimeout * time.Second))
+	m.Connection.SetReadDeadline(time.Now().Add(ReadTimeout * time.Second))
 	n, err := m.Connection.Read(b)
 	if err != nil {
 		return nil, err
@@ -70,11 +97,16 @@ func (m *Marstek) sendMessage(sendData []byte) ([]byte, error) {
 	return b[:n], err
 }
 
+// sendRequest constructs a JSON request using a template and sends it to the Marstek
+// device. It takes in the method name and parameters as input, generates the request
+// JSON, and sends it using the sendMessage method. The function handles retries in
+// case of timeouts and returns the response as a map along with any error encountered
+// during the process.
 func (m *Marstek) sendRequest(methods, params string) (map[string]interface{}, error) {
 	if params == "" {
 		params = `{"id": 0}`
 	}
-	tmpl, err := template.New("request").Parse(REQUEST_JSON)
+	tmpl, err := template.New("request").Parse(requestBaseJson)
 	if err != nil {
 		log.Log.Errorf("Error generating from template: %v", err)
 		return nil, err
@@ -109,10 +141,22 @@ func (m *Marstek) sendRequest(methods, params string) (map[string]interface{}, e
 				json.Compact(&buffer, b)
 				log.Log.Debugf("Received response: %s", buffer.String())
 			}
-			return v, nil
+			if result, ok := v["result"]; ok {
+				return result.(map[string]interface{}), nil
+			}
+			if marstekError, ok := v["error"]; ok {
+				errorInfo := marstekError.(map[string]interface{})
+				info, err := json.Marshal(&errorInfo)
+				if err != nil {
+					return nil, fmt.Errorf("Device error: %v", marstekError)
+				}
+				return nil, fmt.Errorf("Device error: %v", info)
+			}
+
+			return nil, fmt.Errorf("Device result info not received")
 		case ok && netErr.Timeout():
 			log.Log.Infof("Read timeout, retrying... (%d/%d)", i+1, MaxRetries)
-			time.Sleep(1 * time.Second)
+			time.Sleep(time.Duration(RetryDelay) * time.Second)
 			continue
 		default:
 			log.Log.Errorf("Error reading from connection: %v", err)
@@ -123,41 +167,74 @@ func (m *Marstek) sendRequest(methods, params string) (map[string]interface{}, e
 	return nil, fmt.Errorf("Max tries reached without a successful response")
 }
 
+// GetDevice retrieves the device information by sending a request to the device using its
+// BLE MAC address. It constructs a JSON request with the provided BLE MAC address and sends
+// it to the device to obtain the device information. The method returns the device information
+// as a map and any error encountered during the process.
 func (m *Marstek) GetDevice(bleMac string) (map[string]interface{}, error) {
-	device, err := m.sendRequest("Marstek.GetDevice", fmt.Sprintf(`{"ble_mac":"%s"}`, bleMac))
-	if err != nil {
-		return nil, err
-	}
-	if result, ok := device["result"]; ok {
-		return result.(map[string]interface{}), nil
-	}
-	if marstekError, ok := device["error"]; ok {
-		errorInfo := marstekError.(map[string]interface{})
-		info, err := json.Marshal(&errorInfo)
-		if err != nil {
-			return nil, fmt.Errorf("Device error: %v", marstekError)
-		}
-		return nil, fmt.Errorf("Device error: %v", info)
-	}
-
-	return nil, fmt.Errorf("Device result info not received")
+	return m.sendRequest("Marstek.GetDevice", fmt.Sprintf(`{"ble_mac":"%s"}`, bleMac))
 }
 
-func (m *Marstek) GetStatus() (map[string]interface{}, error) {
+// GetWifiStatus retrieves the Wi-Fi status of the device by sending a request to
+// the device. It constructs a JSON request and sends it to the device to obtain the
+// Wi-Fi status information. The method returns the Wi-Fi status as a map and any error
+// encountered during the process.
+func (m *Marstek) GetWifiStatus() (map[string]interface{}, error) {
+	return m.sendRequest("Wifi.GetStatus", "")
+}
+
+// GetBatStatus retrieves the battery status of the device by sending a request to
+// the device. It constructs a JSON request and sends it to the device to obtain the
+// battery status information. The method returns the battery status as a map and any
+// error encountered during the process.
+func (m *Marstek) GetBatStatus() (map[string]interface{}, error) {
+	return m.sendRequest("BAT.GetStatus", "")
+}
+
+// GetPVStatus retrieves the photovoltaic (PV) status of the device by sending a request to
+// the device. It constructs a JSON request and sends it to the device to obtain the PV
+// status information. The method returns the PV status as a map and any error encountered
+// during the process.
+func (m *Marstek) GetPVStatus() (map[string]interface{}, error) {
+	return m.sendRequest("PV.GetStatus", "")
+}
+
+// GetEnergySystemStatus retrieves the energy system status of the device by sending a request to
+// the device. It constructs a JSON request and sends it to the device to obtain the energy
+// system status information. The method returns the energy system status as a map and any
+// error encountered during the process.
+func (m *Marstek) GetEnergySystemStatus() (map[string]interface{}, error) {
 	return m.sendRequest("ES.GetStatus", "")
 }
 
+// GetEnergyMeterStatus retrieves the energy meter status of the device by sending a request to
+// the device. It constructs a JSON request and sends it to the device to obtain the energy
+// meter status information. The method returns the energy meter status as a map and any
+// error encountered during the process.
+func (m *Marstek) GetEnergyMeterStatus() (map[string]interface{}, error) {
+	return m.sendRequest("EM.GetStatus", "")
+}
+
+// GetMode retrieves the current mode of the device by sending a request to
+// the device. It constructs a JSON request using a template and sends it
+// to the device to obtain the mode information. The method returns the
+// mode information as a map and any error encountered during the process.
 func (m *Marstek) GetMode() (map[string]interface{}, error) {
 	return m.sendRequest("ES.GetMode", "")
 }
 
+// SetEnvironmentPowerConsumption sets the environment power consumption by
+// sending a request to the device. It constructs a JSON request using a
+// template and sends it to the device to update the power consumption settings.
+// The method takes in the desired power level and cooldown time as parameters and
+// returns any error encountered during the process.
 func (m *Marstek) SetEnvironmentPowerConsumption(power, cdTime int) error {
 	device, err := m.GetDevice("0")
 	if err != nil {
 		return err
 	}
 	fmt.Println("Device info:", device["id"])
-	tmpl, err := template.New("request").Parse(REQUEST_PASSIVE_JSON)
+	tmpl, err := template.New("request").Parse(requestPassiveJson)
 	if err != nil {
 		log.Log.Errorf("Error generating from template: %v", err)
 		return err
@@ -178,8 +255,12 @@ func (m *Marstek) SetEnvironmentPowerConsumption(power, cdTime int) error {
 	return err
 }
 
+// ClearManualSchedule clears all manual schedules by sending a request to set
+// each schedule to disabled with default values. It iterates through the maximum
+// number of allowed manual schedules and sends a request for each one to ensure
+// they are all cleared.
 func (m *Marstek) ClearManualSchedule() error {
-	tmpl, err := template.New("schedule").Parse(REQUEST_MANUAL_SCHEDULE_JSON)
+	tmpl, err := template.New("schedule").Parse(requestManualScheduleJson)
 	if err != nil {
 		log.Log.Errorf("Error generating from template: %v", err)
 		return err

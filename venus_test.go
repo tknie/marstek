@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -106,7 +107,21 @@ func TestGetEnergeMode(t *testing.T) {
 	if !assert.NoError(t, err, "Failed to send request ES.GetMode") {
 		return
 	}
-	fmt.Printf("Response: %v\n", x)
+
+	fmt.Printf("Response:\n")
+	dumpMap(2, x)
+}
+
+func dumpMap(level int, m map[string]interface{}) {
+	prefix := strings.Repeat(" ", level)
+	for k, v := range m {
+		switch val := v.(type) {
+		case map[string]interface{}:
+			dumpMap(level+2, val)
+		default:
+			fmt.Printf("%s%s = %v\n", prefix, k, v)
+		}
+	}
 }
 
 func TestSetEnergeStatus(t *testing.T) {

@@ -4,7 +4,6 @@ mqtt
 *.log
 *.swp
 .DS_Store
-docker/ecoflow2db
 testenv.sh
 .vscode/
 test.sh
