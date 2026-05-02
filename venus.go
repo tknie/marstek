@@ -12,7 +12,11 @@ import (
 )
 
 var REQUEST_JSON = `{"id": {{.Id}},"method": "{{.Methods}}","params": {{.Params}}}`
-var REQUEST_PASSIVE_JSON = `{"id": {{.Id}}, config:{"mode": "Passive","passive_cfg": { "power": {{.Request}}, "cd_time": {{.SetTime}}}}}`
+var REQUEST_MANUAL_SCHEDULE_JSON = `{"id": {{.Id}},"config": {"mode": "Manual","manual_cfg": {"time_num": {{.TimeNum}},"start_time": "{{.StartTime}}","end_time": "{{.EndTime}}","week_set": {{.WeekSet}},"power": {{.Power}},"enable": {{.Enable}}}}}`
+var REQUEST_PASSIVE_JSON = `{"id": {{.Id}}, "config": {"mode": "Passive","passive_cfg": { "power": {{.Request}}, "cd_time": {{.SetTime}}}}}`
+
+// MaxManualSchedules defines the maximum number of manual schedules that can be set for the device. This is based on the device's capabilities and ensures that we do not exceed the allowed number of schedules when clearing them.
+const MaxManualSchedules = 10
 
 type Marstek struct {
 	Services   string
@@ -62,7 +66,7 @@ func (m *Marstek) sendMessage(sendData []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Log.Debugf("Received %d bytes: %s\n", n, string(b[:n]))
+	log.Log.Debugf("Received %d bytes\n", n)
 	return b[:n], err
 }
 
@@ -95,8 +99,8 @@ func (m *Marstek) sendRequest(methods, params string) (map[string]interface{}, e
 			v := make(map[string]interface{})
 			err = json.Unmarshal(b, &v)
 			if err != nil {
-				fmt.Printf("Error unmarshaling JSON: %v\n", err)
-				fmt.Printf("Received error data: %s\n", string(b))
+				log.Log.Errorf("Error unmarshaling JSON: %v\n", err)
+				log.Log.Debugf("Received error data: %s\n", string(b))
 				return nil, err
 			}
 			requestId++
@@ -108,7 +112,7 @@ func (m *Marstek) sendRequest(methods, params string) (map[string]interface{}, e
 			return v, nil
 		case ok && netErr.Timeout():
 			log.Log.Infof("Read timeout, retrying... (%d/%d)", i+1, MaxRetries)
-			fmt.Printf("Read timeout, retrying... (%d/%d)\n", i+1, MaxRetries)
+			time.Sleep(1 * time.Second)
 			continue
 		default:
 			log.Log.Errorf("Error reading from connection: %v", err)
@@ -172,4 +176,34 @@ func (m *Marstek) SetEnvironmentPowerConsumption(power, cdTime int) error {
 	fmt.Println("Sending request:", buffer.String())
 	_, err = m.sendRequest("ES.SetMode", buffer.String())
 	return err
+}
+
+func (m *Marstek) ClearManualSchedule() error {
+	tmpl, err := template.New("schedule").Parse(REQUEST_MANUAL_SCHEDULE_JSON)
+	if err != nil {
+		log.Log.Errorf("Error generating from template: %v", err)
+		return err
+	}
+	for i := 0; i < MaxManualSchedules; i++ {
+		var buffer bytes.Buffer
+
+		err = tmpl.Execute(&buffer, struct {
+			Id        int
+			Power     int
+			Enable    bool
+			TimeNum   int
+			StartTime string
+			EndTime   string
+			WeekSet   int
+		}{1, 0, false, i, "00:00", "00:00", 0})
+		if err != nil {
+			return err
+		}
+
+		_, err := m.sendRequest("ES.SetMode", buffer.String())
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

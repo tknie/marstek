@@ -17,9 +17,13 @@ func init() {
 }
 
 func TestMastekDevice(t *testing.T) {
-	fmt.Println("Testing Marstek connection...")
 	destination := os.Getenv("MARSTEK_DESTINATION")
+	if destination == "" {
+		fmt.Println("MARSTEK_DESTINATION environment variable is not set. Please set it to the Marstek device's address (e.g., 192.168.1.100:8080) and run the tests again.")
+		return
+	}
 
+	fmt.Println("Testing Marstek connection..." + t.Name())
 	m := New(destination)
 	fmt.Printf("Connected to Marstek: %v\n", m)
 	x, err := m.sendRequest("Marstek.GetDevice",
@@ -35,9 +39,14 @@ func TestMastekDevice(t *testing.T) {
 }
 
 func TestGetStatus(t *testing.T) {
-	fmt.Println("Testing Marstek connection...")
-
 	destination := os.Getenv("MARSTEK_DESTINATION")
+	if destination == "" {
+		fmt.Println("MARSTEK_DESTINATION environment variable is not set. Please set it to the Marstek device's address (e.g., 192.168.1.100:8080) and run the tests again.")
+		return
+	}
+
+	fmt.Println("Testing Marstek connection..." + t.Name())
+
 	m := New(destination)
 	fmt.Printf("Connected to Marstek: %v\n", m)
 	x, err := m.sendRequest("Wifi.GetStatus", "")
@@ -56,9 +65,13 @@ func TestGetStatus(t *testing.T) {
 }
 
 func TestEnergeStatus(t *testing.T) {
-	fmt.Println("Testing Marstek connection...")
-
 	destination := os.Getenv("MARSTEK_DESTINATION")
+	if destination == "" {
+		fmt.Println("MARSTEK_DESTINATION environment variable is not set. Please set it to the Marstek device's address (e.g., 192.168.1.100:8080) and run the tests again.")
+		return
+	}
+
+	fmt.Println("Testing Marstek connection..." + t.Name())
 	m := New(destination)
 	fmt.Printf("Connected to Marstek: %v\n", m)
 	x, err := m.sendRequest("Marstek.GetDevice",
@@ -80,9 +93,13 @@ func TestEnergeStatus(t *testing.T) {
 }
 
 func TestGetEnergeMode(t *testing.T) {
-	fmt.Println("Testing Marstek connection...")
-
 	destination := os.Getenv("MARSTEK_DESTINATION")
+	if destination == "" {
+		fmt.Println("MARSTEK_DESTINATION environment variable is not set. Please set it to the Marstek device's address (e.g., 192.168.1.100:8080) and run the tests again.")
+		return
+	}
+
+	fmt.Println("Testing Marstek connection..." + t.Name())
 	m := New(destination)
 	fmt.Printf("Connected to Marstek: %v\n", m)
 	x, err := m.sendRequest("ES.GetMode", "")
@@ -93,9 +110,13 @@ func TestGetEnergeMode(t *testing.T) {
 }
 
 func TestSetEnergeStatus(t *testing.T) {
-	fmt.Println("Testing Marstek connection...")
-
 	destination := os.Getenv("MARSTEK_DESTINATION")
+	if destination == "" {
+		fmt.Println("MARSTEK_DESTINATION environment variable is not set. Please set it to the Marstek device's address (e.g., 192.168.1.100:8080) and run the tests again.")
+		return
+	}
+
+	fmt.Println("Testing Marstek connection..." + t.Name())
 	m := New(destination)
 	fmt.Printf("Connected to Marstek: %v\n", m)
 	mode := `{
@@ -104,7 +125,7 @@ func TestSetEnergeStatus(t *testing.T) {
 "mode": "Passive"
 ,
 "passive_cfg": {
-"power": 100,
+"power": -200,
 "cd_time": 3000
 }
 }
@@ -118,23 +139,50 @@ func TestSetEnergeStatus(t *testing.T) {
 }
 
 func TestSetMode(t *testing.T) {
-	fmt.Println("Testing Marstek connection...")
-
 	destination := os.Getenv("MARSTEK_DESTINATION")
+	if destination == "" {
+		fmt.Println("MARSTEK_DESTINATION environment variable is not set. Please set it to the Marstek device's address (e.g., 192.168.1.100:8080) and run the tests again.")
+		return
+	}
+	fmt.Println("Testing Marstek connection..." + t.Name())
 	m := New(destination)
+	currentMode, err := m.GetMode()
+	if !assert.NoError(t, err, "Failed to get mode") {
+		return
+	}
+	info, err := json.Marshal(&currentMode)
+	if !assert.NoError(t, err, "Failed to marshal mode data") {
+		return
+	}
+	fmt.Printf("Current mode: %s\n", string(info))
+
 	fmt.Printf("Connected to Marstek: %v\n", m)
-	err := m.SetEnvironmentPowerConsumption(100, 3000)
+	err = m.SetEnvironmentPowerConsumption(0, 3600)
 	if !assert.NoError(t, err, "Failed to set environment power consumption") {
 		return
 	}
-	time.Sleep(35 * time.Second)
+	fmt.Printf("Set environment power consumption to Marstek, waiting ....\n")
+	time.Sleep(1 * time.Second)
 	data, err := m.GetMode()
 	if !assert.NoError(t, err, "Failed to get mode") {
 		return
 	}
-	info, err := json.Marshal(&data)
+	info, err = json.Marshal(&data)
 	if !assert.NoError(t, err, "Failed to marshal mode data") {
 		return
 	}
 	fmt.Printf("Mode info: %s\n", string(info))
+}
+
+func TestClearSchedule(t *testing.T) {
+	destination := os.Getenv("MARSTEK_DESTINATION")
+	if destination == "" {
+		fmt.Println("MARSTEK_DESTINATION environment variable is not set. Please set it to the Marstek device's address (e.g., 192.168.1.100:8080) and run the tests again.")
+		return
+	}
+	fmt.Println("Testing Marstek connection..." + t.Name())
+	m := New(destination)
+	fmt.Printf("Connected to Marstek: %v\n", m)
+	err := m.ClearManualSchedule()
+	assert.NoError(t, err, "Failed to clear manual schedule")
 }
