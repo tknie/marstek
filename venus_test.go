@@ -172,7 +172,7 @@ func TestSetMode(t *testing.T) {
 	fmt.Printf("Current mode: %s\n", string(info))
 
 	fmt.Printf("Connected to Marstek: %v\n", m)
-	err = m.PassivePowerConsumption(0, 3600)
+	err = m.PassivePowerConsumption(-200, 3600)
 	if !assert.NoError(t, err, "Failed to set environment power consumption") {
 		return
 	}

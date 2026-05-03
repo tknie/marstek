@@ -288,12 +288,15 @@ func (m *Marstek) LEDControl(enable bool) error {
 // template and sends it to the device to update the power consumption settings.
 // The method takes in the desired power level and cooldown time as parameters and
 // returns any error encountered during the process.
+// The negative power value indicates the power consumption level into the battery,
+// positive power value indicates the power output level from the battery, and zero
+// means no power consumption or output.
 func (m *Marstek) PassivePowerConsumption(power, cdTime int) error {
 	device, err := m.GetDevice("0")
 	if err != nil {
 		return err
 	}
-	fmt.Println("Device info:", device["id"])
+	log.Log.Infof("Device info: %v", device["id"])
 	tmpl, err := template.New("request").Parse(requestPassiveJson)
 	if err != nil {
 		log.Log.Errorf("Error generating from template: %v", err)
