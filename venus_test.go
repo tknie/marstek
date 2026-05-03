@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-jose/go-jose/v4/testutils/assert"
+	"github.com/go-openapi/testify/assert"
 	"github.com/tknie/log"
 	"go.uber.org/zap/zapcore"
 )
@@ -172,7 +172,7 @@ func TestSetMode(t *testing.T) {
 	fmt.Printf("Current mode: %s\n", string(info))
 
 	fmt.Printf("Connected to Marstek: %v\n", m)
-	err = m.SetEnvironmentPowerConsumption(0, 3600)
+	err = m.PassivePowerConsumption(0, 3600)
 	if !assert.NoError(t, err, "Failed to set environment power consumption") {
 		return
 	}
@@ -200,4 +200,38 @@ func TestClearSchedule(t *testing.T) {
 	fmt.Printf("Connected to Marstek: %v\n", m)
 	err := m.ClearManualSchedule()
 	assert.NoError(t, err, "Failed to clear manual schedule")
+}
+
+func TestGetMode(t *testing.T) {
+	destination := os.Getenv("MARSTEK_DESTINATION")
+	if destination == "" {
+		fmt.Println("MARSTEK_DESTINATION environment variable is not set. Please set it to the Marstek device's address (e.g., 192.168.1.100:8080) and run the tests again.")
+		return
+	}
+	fmt.Println("Testing Marstek connection..." + t.Name())
+	m := New(destination)
+	fmt.Printf("Connected to Marstek: %v\n", m)
+	result, err := m.GetEnergyMeterStatus()
+	assert.NoError(t, err, "Failed to clear manual schedule")
+	if assert.NotNil(t, result, "Result should not be nil") {
+		fmt.Printf("Energy Meter Status:\n")
+		dumpMap(0, result)
+	}
+}
+
+func TestGetDevice(t *testing.T) {
+	destination := os.Getenv("MARSTEK_DESTINATION")
+	if destination == "" {
+		fmt.Println("MARSTEK_DESTINATION environment variable is not set. Please set it to the Marstek device's address (e.g., 192.168.1.100:8080) and run the tests again.")
+		return
+	}
+	fmt.Println("Testing Marstek connection..." + t.Name())
+	m := New(destination)
+	fmt.Printf("Connected to Marstek: %v\n", m)
+	result, err := m.GetDevice("0")
+	assert.NoError(t, err, "Failed to get device")
+	if assert.NotNil(t, result, "Result should not be nil") {
+		fmt.Printf("Device Info:\n")
+		dumpMap(2, result)
+	}
 }

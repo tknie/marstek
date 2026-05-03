@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strconv"
 	"text/template"
 	"time"
 
@@ -38,6 +39,16 @@ type Marstek struct {
 	Connection net.Conn
 }
 
+type Schedule struct {
+	Id        int
+	Power     int
+	Enable    bool
+	TimeNum   int
+	StartTime string
+	EndTime   string
+	WeekSet   int
+}
+
 var requestId uint64 = 1
 
 // New creates a new instance of the Marstek struct with the provided
@@ -66,7 +77,7 @@ func (m *Marstek) connect() error {
 		return err
 	}
 
-	fmt.Printf("Established connection to %s \n", m.Services)
+	log.Log.Infof("Established connection to %s", m.Services)
 	m.Connection = conn
 	return nil
 }
@@ -84,11 +95,10 @@ func (m *Marstek) sendMessage(sendData []byte) ([]byte, error) {
 	defer m.Connection.Close()
 
 	log.Log.Debugf("Sending request: %s", string(sendData))
-	fmt.Println("Sending request...")
 	m.Connection.Write(sendData)
-	fmt.Println("Request sent, waiting for response...")
+	log.Log.Infof("Request sent, waiting for response...")
 	b := make([]byte, 4096)
-	m.Connection.SetReadDeadline(time.Now().Add(ReadTimeout * time.Second))
+	m.Connection.SetReadDeadline(time.Now().Add(time.Duration(ReadTimeout) * time.Second))
 	n, err := m.Connection.Read(b)
 	if err != nil {
 		return nil, err
@@ -191,6 +201,14 @@ func (m *Marstek) GetBatStatus() (map[string]interface{}, error) {
 	return m.sendRequest("BAT.GetStatus", "")
 }
 
+// GetBluetoothStatus retrieves the Bluetooth status of the device by sending a request to
+// the device. It constructs a JSON request and sends it to the device to obtain the
+// Bluetooth status information. The method returns the Bluetooth status as a map and any
+// error encountered during the process.
+func (m *Marstek) GetBluetoothStatus() (map[string]interface{}, error) {
+	return m.sendRequest("BLE.GetStatus", "")
+}
+
 // GetPVStatus retrieves the photovoltaic (PV) status of the device by sending a request to
 // the device. It constructs a JSON request and sends it to the device to obtain the PV
 // status information. The method returns the PV status as a map and any error encountered
@@ -223,12 +241,54 @@ func (m *Marstek) GetMode() (map[string]interface{}, error) {
 	return m.sendRequest("ES.GetMode", "")
 }
 
-// SetEnvironmentPowerConsumption sets the environment power consumption by
+// SetDOD sets the depth of discharge (DOD) value for the device by sending a request to
+// the device. It constructs a JSON request using a template and sends it to the device
+// to update the DOD settings. The method takes in the desired DOD value as a parameter
+// and returns any error encountered during the process. The DOD value must be between 33
+// and 88, and the method will return an error if the value is out of range.
+func (m *Marstek) SetDOD(value int) error {
+	if value < 33 || value > 88 {
+		return fmt.Errorf("DOD value must be between 33 and 88")
+	}
+	_, err := m.sendRequest("DOD.SET", fmt.Sprintf(`{"value": %d}}`, value))
+	return err
+}
+
+// BluetoothLock sets the Bluetooth lock status of the device by sending a request to the device.
+// It constructs a JSON request using a template and sends it to the device to update the Bluetooth
+// lock settings. The method takes in a boolean parameter to enable or disable the Bluetooth lock
+// and returns any error encountered during the process. The enable parameter determines whether to
+// enable (true) or disable (false) the Bluetooth lock, and the method sends the appropriate request
+// to the device based on the value of this parameter.
+func (m *Marstek) BluetoothLock(enable bool) error {
+	enableValue := 1
+	if enable {
+		enableValue = 0
+	}
+	_, err := m.sendRequest("BLE.Lock", fmt.Sprintf(`{"enable": %d}`, enableValue))
+	return err
+}
+
+// LEDControl sets the LED control status of the device by sending a request to the device. It constructs
+// a JSON request using a template and sends it to the device to update the LED control settings. The method
+// takes in a boolean parameter to enable or disable the LED control and returns any error encountered during
+// the process. The enable parameter determines whether to enable (true) or disable (false) the LED control,
+// and the method sends the appropriate request to the device based on the value of this parameter.
+func (m *Marstek) LEDControl(enable bool) error {
+	enableValue := 1
+	if !enable {
+		enableValue = 0
+	}
+	_, err := m.sendRequest("Led.Ctrl", fmt.Sprintf(`{"state": %d}`, enableValue))
+	return err
+}
+
+// PassivePowerConsumption sets the environment power consumption by
 // sending a request to the device. It constructs a JSON request using a
 // template and sends it to the device to update the power consumption settings.
 // The method takes in the desired power level and cooldown time as parameters and
 // returns any error encountered during the process.
-func (m *Marstek) SetEnvironmentPowerConsumption(power, cdTime int) error {
+func (m *Marstek) PassivePowerConsumption(power, cdTime int) error {
 	device, err := m.GetDevice("0")
 	if err != nil {
 		return err
@@ -250,9 +310,76 @@ func (m *Marstek) SetEnvironmentPowerConsumption(power, cdTime int) error {
 		panic(err)
 	}
 
-	fmt.Println("Sending request:", buffer.String())
+	log.Log.Infof("Sending request: %s", buffer.String())
 	_, err = m.sendRequest("ES.SetMode", buffer.String())
 	return err
+}
+
+// SetAutoMode sets the device to auto mode by sending a request to the device.
+// It constructs a JSON request using a template and sends it to the device to
+// update the mode settings. The method returns any error encountered during the
+// process.
+func (m *Marstek) SetAutoMode(enable bool) error {
+	enableValue := 1
+	if !enable {
+		enableValue = 0
+	}
+	mode := `{"id": 1,"config": {"mode": "Auto","auto_cfg": {"enable": ` + strconv.Itoa(enableValue) + `}}}}`
+	_, err := m.sendRequest("ES.SetMode", mode)
+	return err
+}
+
+// SetAIMode sets the device to AI mode by sending a request to the device. It
+// constructs a JSON request using a template and sends it to the device to update
+// the mode settings. The method takes in a boolean parameter to enable or disable
+// AI mode and returns any error encountered during the process.
+func (m *Marstek) SetAIMode(enable bool) error {
+	enableValue := 1
+	if !enable {
+		enableValue = 0
+	}
+	mode := `{"id": 1,"config": {"mode": "Auto","ai_cfg": {"enable": ` + strconv.Itoa(enableValue) + `}}}}`
+	_, err := m.sendRequest("ES.SetMode", mode)
+	return err
+}
+
+// SetUPSMode sets the device to UPS mode by sending a request to the device. It
+// constructs a JSON request using a template and sends it to the device to update
+// the mode settings. The method takes in a boolean parameter to enable or disable
+// UPS mode and returns any error encountered during the process.
+func (m *Marstek) SetUPSMode(enable bool) error {
+	enableValue := 1
+	if !enable {
+		enableValue = 0
+	}
+	mode := `{"id": 1,"config": {"mode": "Auto","ups_cfg": {"enable": ` + strconv.Itoa(enableValue) + `}}}}`
+	_, err := m.sendRequest("ES.SetMode", mode)
+	return err
+}
+
+// SetManualSchedule sets a manual schedule for the device by sending a request to
+// the device. It constructs a JSON request using a template and sends it to the device
+// to update the manual schedule settings. The method takes in a Schedule struct as a
+// parameter, which contains the schedule details, and returns any error encountered
+// during the process.
+func (m *Marstek) SetManualSchedule(schedule *Schedule) error {
+	tmpl, err := template.New("schedule").Parse(requestManualScheduleJson)
+	if err != nil {
+		log.Log.Errorf("Error generating from template: %v", err)
+		return err
+	}
+	var buffer bytes.Buffer
+
+	err = tmpl.Execute(&buffer, schedule)
+	if err != nil {
+		return err
+	}
+
+	_, err = m.sendRequest("ES.SetMode", buffer.String())
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // ClearManualSchedule clears all manual schedules by sending a request to set
@@ -265,18 +392,11 @@ func (m *Marstek) ClearManualSchedule() error {
 		log.Log.Errorf("Error generating from template: %v", err)
 		return err
 	}
+	schedule := &Schedule{1, 0, false, 0, "00:00", "00:00", 0}
 	for i := 0; i < MaxManualSchedules; i++ {
 		var buffer bytes.Buffer
-
-		err = tmpl.Execute(&buffer, struct {
-			Id        int
-			Power     int
-			Enable    bool
-			TimeNum   int
-			StartTime string
-			EndTime   string
-			WeekSet   int
-		}{1, 0, false, i, "00:00", "00:00", 0})
+		schedule.TimeNum = i
+		err = tmpl.Execute(&buffer, schedule)
 		if err != nil {
 			return err
 		}
