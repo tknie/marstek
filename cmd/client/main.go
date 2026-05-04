@@ -14,11 +14,13 @@ func main() {
 	es := false
 	bat := false
 	pv := false
+	mode := false
 	flag.BoolVar(&list, "l", false, "List all available devices")
 	flag.BoolVar(&em, "e", false, "Show energy meter status")
 	flag.BoolVar(&es, "s", false, "Show energy system status")
 	flag.BoolVar(&bat, "b", false, "Show battery status")
 	flag.BoolVar(&pv, "p", false, "Show photovoltaic status")
+	flag.BoolVar(&mode, "m", false, "Show device mode")
 	flag.Parse()
 	args := flag.Args()
 	if len(args) < 1 {
@@ -72,6 +74,14 @@ func main() {
 			return
 		}
 		fmt.Println("Energy System:")
+		dumpMap(2, d)
+	case mode:
+		d, err := m.GetMode()
+		if err != nil {
+			fmt.Println("Error getting device: " + err.Error())
+			return
+		}
+		fmt.Println("Device Mode:")
 		dumpMap(2, d)
 	default:
 		fmt.Println("No valid option provided. Use -l, -e, -s, -b or -p.")
