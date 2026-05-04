@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This golang Marstek local API can connect to any Marstek local API enabled device like Marstek Venus A or Venus D/E.
+This Golang-based Marstek local API can connect to any Marstek local API enabled device like Marstek Venus A or Venus D/E.
 
 For details have a look at the API documentation. It can be referenced here: <https://godoc.org/github.com/tknie/marstek>
 

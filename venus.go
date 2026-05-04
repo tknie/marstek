@@ -158,9 +158,9 @@ func (m *Marstek) sendRequest(methods, params string) (map[string]interface{}, e
 				errorInfo := marstekError.(map[string]interface{})
 				info, err := json.Marshal(&errorInfo)
 				if err != nil {
-					return nil, fmt.Errorf("Device error: %v", marstekError)
+					return nil, fmt.Errorf("Marstek error: %s", marstekError)
 				}
-				return nil, fmt.Errorf("Device error: %v", info)
+				return nil, fmt.Errorf("Device error: %s", string(info))
 			}
 
 			return nil, fmt.Errorf("Device result info not received")
@@ -198,7 +198,7 @@ func (m *Marstek) GetWifiStatus() (map[string]interface{}, error) {
 // battery status information. The method returns the battery status as a map and any
 // error encountered during the process.
 func (m *Marstek) GetBatStatus() (map[string]interface{}, error) {
-	return m.sendRequest("BAT.GetStatus", "")
+	return m.sendRequest("Bat.GetStatus", "")
 }
 
 // GetBluetoothStatus retrieves the Bluetooth status of the device by sending a request to
