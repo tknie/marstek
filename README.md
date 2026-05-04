@@ -1,4 +1,4 @@
-# GOLANG-Marstek local API
+# Golang-based Marstek local API
 
 ## Introduction
 
