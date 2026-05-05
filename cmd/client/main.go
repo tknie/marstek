@@ -5,8 +5,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tknie/log"
 	"github.com/tknie/marstek"
 )
+
+func init() {
+	log.InitZapLogWithFilename("marstek.log")
+}
 
 func main() {
 	list := false
@@ -15,12 +20,14 @@ func main() {
 	bat := false
 	pv := false
 	mode := false
-	flag.BoolVar(&list, "l", false, "List all available devices")
+	overview := false
+	flag.BoolVar(&list, "d", false, "List all available devices")
 	flag.BoolVar(&em, "e", false, "Show energy meter status")
 	flag.BoolVar(&es, "s", false, "Show energy system status")
 	flag.BoolVar(&bat, "b", false, "Show battery status")
 	flag.BoolVar(&pv, "p", false, "Show photovoltaic status")
 	flag.BoolVar(&mode, "m", false, "Show device mode")
+	flag.BoolVar(&overview, "o", false, "Show device overview (mode, energy system, energy meter, battery and photovoltaic status)")
 	flag.Parse()
 	args := flag.Args()
 	if len(args) < 1 {
@@ -83,6 +90,14 @@ func main() {
 		}
 		fmt.Println("Device Mode:")
 		dumpMap(2, d)
+	case overview:
+		d, err := m.Summary()
+		if err != nil {
+			fmt.Println("Error getting device summary: " + err.Error())
+			return
+		}
+		fmt.Println("Device Overview:")
+		dumpMap(2, d)
 	default:
 		fmt.Println("No valid option provided. Use -l, -e, -s, -b or -p.")
 	}
@@ -93,6 +108,7 @@ func dumpMap(level int, m map[string]interface{}) {
 	for k, v := range m {
 		switch val := v.(type) {
 		case map[string]interface{}:
+			fmt.Println(prefix + k + ":")
 			dumpMap(level+2, val)
 		default:
 			fmt.Printf("%s%s = %v\n", prefix, k, v)

@@ -411,3 +411,38 @@ func (m *Marstek) ClearManualSchedule() error {
 	}
 	return nil
 }
+
+func (m *Marstek) Summary() (map[string]interface{}, error) {
+	marstekMap := make(map[string]interface{})
+	device, err := m.GetDevice("0")
+	if err != nil {
+		log.Log.Errorf("Error getting device parameter: %v", err)
+		return nil, err
+	}
+	marstekMap["device"] = device
+	battery, err := m.GetBatStatus()
+	if err != nil {
+		log.Log.Errorf("Error getting battery status: %v", err)
+		return nil, err
+	}
+	marstekMap["battery"] = battery
+	meterStatus, err := m.GetEnergyMeterStatus()
+	if err != nil {
+		log.Log.Errorf("Error getting energy meter status: %v", err)
+		return nil, err
+	}
+	marstekMap["energy_meter"] = meterStatus
+	systemStatus, err := m.GetEnergySystemStatus()
+	if err != nil {
+		log.Log.Errorf("Error getting energy system status: %v", err)
+		return nil, err
+	}
+	marstekMap["energy_system"] = systemStatus
+	pvStatus, err := m.GetPVStatus()
+	if err != nil {
+		log.Log.Errorf("Error photovoltaic system status: %v", err)
+		return nil, err
+	}
+	marstekMap["photovoltaic"] = pvStatus
+	return marstekMap, nil
+}
