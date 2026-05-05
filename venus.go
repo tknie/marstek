@@ -419,6 +419,7 @@ func (m *Marstek) Summary() (map[string]interface{}, error) {
 		log.Log.Errorf("Error getting device parameter: %v", err)
 		return nil, err
 	}
+	time.Sleep(100 * time.Millisecond)
 	marstekMap["device"] = device
 	battery, err := m.GetBatStatus()
 	if err != nil {
@@ -426,18 +427,21 @@ func (m *Marstek) Summary() (map[string]interface{}, error) {
 		return nil, err
 	}
 	marstekMap["battery"] = battery
+	time.Sleep(100 * time.Millisecond)
 	meterStatus, err := m.GetEnergyMeterStatus()
 	if err != nil {
 		log.Log.Errorf("Error getting energy meter status: %v", err)
 		return nil, err
 	}
 	marstekMap["energy_meter"] = meterStatus
+	time.Sleep(100 * time.Millisecond)
 	systemStatus, err := m.GetEnergySystemStatus()
 	if err != nil {
 		log.Log.Errorf("Error getting energy system status: %v", err)
 		return nil, err
 	}
 	marstekMap["energy_system"] = systemStatus
+	time.Sleep(100 * time.Millisecond)
 	pvStatus, err := m.GetPVStatus()
 	if err != nil {
 		log.Log.Errorf("Error photovoltaic system status: %v", err)
