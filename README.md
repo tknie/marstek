@@ -1,3 +1,5 @@
+***This project is archived because my Marstek devices were not working anymore. I cannot maintain the Marstek API***
+
 # Golang-based Marstek local API
 
 ## Introduction
